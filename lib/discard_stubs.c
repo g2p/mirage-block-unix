@@ -165,6 +165,33 @@ static void worker_discard(struct job_discard *job)
   return;
 #endif
 
+#else
+  // Do it manually
+  size_t sector_size = 512;
+  void *zero_buf = (void*)malloc(sector_size);
+  bzero(zero_buf, sector_size);
+  if (job->offset > INT64_MAX) {
+    job->errno_copy = ERANGE;
+    job->error_fn = "off_t cast";
+    return;
+  }
+  off_t ptr = (off_t)job->offset;
+  off_t end;
+  if (__builtin_add_overflow(job->offset, job->length, &end)) {
+    job->errno_copy = ERANGE;
+    job->error_fn = "off_t add";
+    return;
+  }
+  while (ptr < end) {
+    size_t len_to_zero = MIN(sector_size, end - ptr);
+    ssize_t written = pwrite(job->fd, zero_buf, len_to_zero, ptr);
+    if (written == -1) {
+      job->errno_copy = errno;
+      job->error_fn = "pwrite";
+      return;
+    }
+    ptr += written;
+  }
 #endif
 }
 
