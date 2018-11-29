@@ -140,7 +140,7 @@ type t = {
   use_fsync_after_write: bool;
 }
 
-let to_config { config } = config
+let to_config { config; _ } = config
 
 let (>>*=) m f = m >>= function
   | Ok x -> f x
@@ -247,7 +247,7 @@ let disconnect t = match t.fd with
   | None ->
     return ()
 
-let get_info { info } = return info
+let get_info { info; _ } = return info
 
 let really_read fd = Lwt_cstruct.complete (Lwt_cstruct.read fd)
 let really_write fd = Lwt_cstruct.complete (Lwt_cstruct.write fd)
@@ -335,9 +335,9 @@ let read x sector_start buffers =
   lwt_wrap_exn x "read" offset ~buffers
     (fun () ->
       match x with
-      | { fd = None } ->
+      | { fd = None; _ } ->
         return (Error `Disconnected)
-      | { fd = Some fd } ->
+      | { fd = Some fd; _ } ->
         let len = Cstructs.len buffers in
         let len_sectors = (len + x.info.sector_size - 1) / x.info.sector_size in
         if Int64.(add sector_start (of_int len_sectors) > x.info.size_sectors) then begin
@@ -402,11 +402,11 @@ let write x sector_start buffers =
   lwt_wrap_exn x "write" offset ~buffers
     (fun () ->
       match x with
-      | { fd = None } ->
+      | { fd = None; _ } ->
         return (Error `Disconnected)
-      | { info = { read_write = false } } ->
+      | { info = { read_write = false; _ }; _ } ->
         return (Error `Is_read_only)
-      | { fd = Some fd } ->
+      | { fd = Some fd; _ } ->
         let len = Cstructs.len buffers in
         let len_sectors = (len + x.info.sector_size - 1) / x.info.sector_size in
         if Int64.(add sector_start (of_int len_sectors) > x.info.size_sectors) then begin
@@ -524,9 +524,9 @@ external discard_job: Unix.file_descr -> int64 -> int64 -> unit Lwt_unix.job = "
 
 let discard t sector n =
   match t with
-  | { fd = None } -> return (Error `Disconnected)
-  | { info = { read_write = false } } -> return (Error `Is_read_only)
-  | { fd = Some fd } ->
+  | { fd = None; _ } -> return (Error `Disconnected)
+  | { info = { read_write = false; _ }; _ } -> return (Error `Is_read_only)
+  | { fd = Some fd; _ } ->
     if is_win32
     then return (Error `Unimplemented)
     else if n = 0L then Lwt.return (Ok ())
