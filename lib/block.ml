@@ -488,6 +488,25 @@ let flush t =
          return (Ok ())
       )
 
+let barrier ?durable t =
+  match durable with
+  | Some true ->
+    flush t
+  | _ ->
+    match t.fd with
+    | None -> return (Error `Disconnected)
+    | Some fd ->
+      lwt_wrap_exn t "fsync" 0L
+        (fun () ->
+           ( match t.config.Config.sync with
+             | None -> Lwt.return_unit
+             (* No need to flush to the drive for a barrier *)
+             | _ -> Lwt_unix.run_job (flush_job (Lwt_unix.unix_file_descr fd) false)
+           )
+           >>= fun () ->
+           return (Ok ())
+        )
+
 let seek_mapped t from =
   match t.fd with
   | None -> return (Error `Disconnected)
