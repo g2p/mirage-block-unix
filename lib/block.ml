@@ -15,8 +15,6 @@
  * PERFORMANCE OF THIS SOFTWARE.
  *)
 
-open Lwt.Infix
-
 let src =
   let src = Logs.Src.create "mirage-block-unix" ~doc:"Mirage BLOCK interface for Unix" in
   Logs.Src.set_level src (Some Logs.Info);
@@ -39,10 +37,6 @@ let pp_write_error ppf = function
 module Log = (val Logs.src_log src : Logs.LOG)
 
 let is_win32 = Sys.os_type = "Win32"
-
-type buf = (char, Bigarray.int8_unsigned_elt, Bigarray.c_layout) Bigarray.Array1.t
-
-type id = string
 
 module Raw = struct
   external openfile_unbuffered: string -> bool -> int -> Unix.file_descr = "stub_openfile_direct"
@@ -149,10 +143,10 @@ let (>>*=) m f = m >>= function
 let stat _filename fd =
   Rresult.R.trap_exn Unix.LargeFile.fstat fd |> Rresult.R.error_exn_trap_to_msg |> Lwt.return
 
-let blkgetsize filename fd =
+let blkgetsize _filename fd =
   Rresult.R.trap_exn Raw.blkgetsize fd |> Rresult.R.error_exn_trap_to_msg
 
-let blkgetsectorsize filename fd =
+let blkgetsectorsize _filename fd =
   Rresult.R.trap_exn Raw.blkgetsectorsize fd |> Rresult.R.error_exn_trap_to_msg
 
 let get_file_size filename fd =
@@ -177,7 +171,7 @@ let get_sector_size filename fd =
       (`Msg
          (Printf.sprintf "get_sector_size %s: neither a file nor a block device" filename))
 
-let of_config ({ Config.buffered; sync; path; lock } as config) =
+let of_config ({ Config.buffered; path; lock; _ } as config) =
   let openfile, use_fsync_after_write = match buffered, is_win32 with
     | true, _ -> Raw.openfile_buffered, false
     | false, false -> Raw.openfile_unbuffered, false
@@ -219,7 +213,7 @@ let of_config ({ Config.buffered; sync; path; lock } as config) =
         return ({ fd = Some fd; seek_offset; m;
                   info = { Mirage_block.sector_size; size_sectors; read_write };
                   size_bytes; config; use_fsync_after_write })
-  with e ->
+  with _e ->
     Log.err (fun f -> f "connect %s: failed to open file" path);
     fail_with (Printf.sprintf "connect %s: failed to open file" path)
 
@@ -233,7 +227,7 @@ let remove_prefix prefix x =
   else false, x
 
 let connect ?buffered ?sync ?lock name =
-  let legacy_buffered, path = remove_prefix buffered_prefix name in
+  let legacy_buffered, _path = remove_prefix buffered_prefix name in
   (* Keep support for the legacy buffered: prefix until version 3.x.y *)
   let buffered = if legacy_buffered then Some true else buffered in
   let config = Config.create ?buffered ?sync ?lock name in
@@ -290,7 +284,7 @@ let seek_already_locked x fd offset =
   end else Lwt.return offset
 
 module Cstructs = struct
-  type t = Cstruct.t list
+  (*type t = Cstruct.t list*)
   (** A list of buffers, like a Unix iovec *)
 
   let pp_t ppf t =
